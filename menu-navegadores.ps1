@@ -75,6 +75,60 @@ function Get-NavegadoresInstalados {
 }
 
 # ------------------------------------------------------------------
+# Gera um icone (bitmap) estilizado representando o Firefox,
+# desenhado em tempo de execucao (nao usa nenhuma imagem externa).
+# ------------------------------------------------------------------
+function New-FirefoxLogoBitmap {
+    param([int]$Tamanho = 72)
+
+    $bmp = New-Object System.Drawing.Bitmap($Tamanho, $Tamanho)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.Clear([System.Drawing.Color]::Transparent)
+
+    $laranja       = [System.Drawing.Color]::FromArgb(255, 149, 0)
+    $laranjaEscuro = [System.Drawing.Color]::FromArgb(214, 82, 0)
+
+    $pincelFundo = New-Object System.Drawing.SolidBrush($laranja)
+    $g.FillEllipse($pincelFundo, 2, 2, $Tamanho - 4, $Tamanho - 4)
+
+    $pincelDetalhe = New-Object System.Drawing.SolidBrush($laranjaEscuro)
+    $g.FillEllipse($pincelDetalhe, $Tamanho * 0.22, $Tamanho * 0.12, $Tamanho * 0.56, $Tamanho * 0.56)
+
+    $fonte = New-Object System.Drawing.Font("Segoe UI", [Math]::Round($Tamanho / 3.4), [System.Drawing.FontStyle]::Bold)
+    $pincelTexto = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
+    $formato = New-Object System.Drawing.StringFormat
+    $formato.Alignment = "Center"
+    $formato.LineAlignment = "Center"
+    $retangulo = New-Object System.Drawing.RectangleF(0, 0, $Tamanho, $Tamanho)
+    $g.DrawString("Fx", $fonte, $pincelTexto, $retangulo, $formato)
+
+    $g.Dispose()
+    return $bmp
+}
+
+# ------------------------------------------------------------------
+# Procura, no registro do Windows, a entrada de desinstalacao do
+# Firefox (32 ou 64 bits, usuario atual ou maquina toda)
+# ------------------------------------------------------------------
+function Get-FirefoxUninstallInfo {
+    $caminhosRegistro = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+
+    foreach ($caminho in $caminhosRegistro) {
+        $itens = Get-ItemProperty -Path $caminho -ErrorAction SilentlyContinue |
+                 Where-Object { $_.DisplayName -like "Mozilla Firefox*" }
+        if ($itens) {
+            return $itens | Select-Object -First 1
+        }
+    }
+    return $null
+}
+
+# ------------------------------------------------------------------
 # Formulario principal
 # ------------------------------------------------------------------
 $form = New-Object System.Windows.Forms.Form
@@ -192,6 +246,159 @@ $botaoNavegadores.Add_Click({
         $painelConteudo.Controls.Add($btn)
         $y += 55
     }
+
+    # --------------------------------------------------------------
+    # Secao dedicada ao Firefox: logo + botoes Instalar / Desinstalar
+    # --------------------------------------------------------------
+    $y += 20
+
+    $linhaSeparadora = New-Object System.Windows.Forms.Label
+    $linhaSeparadora.BorderStyle = "Fixed3D"
+    $linhaSeparadora.Location = New-Object System.Drawing.Point(20, $y)
+    $linhaSeparadora.Size = New-Object System.Drawing.Size(400, 2)
+    $painelConteudo.Controls.Add($linhaSeparadora)
+    $y += 20
+
+    $labelFirefoxTitulo = New-Object System.Windows.Forms.Label
+    $labelFirefoxTitulo.Text = "Gerenciar Firefox"
+    $labelFirefoxTitulo.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $labelFirefoxTitulo.AutoSize = $true
+    $labelFirefoxTitulo.Location = New-Object System.Drawing.Point(20, $y)
+    $painelConteudo.Controls.Add($labelFirefoxTitulo)
+    $y += 35
+
+    # Logo do Firefox (desenhado em tempo de execucao)
+    $picLogoFirefox = New-Object System.Windows.Forms.PictureBox
+    $picLogoFirefox.Size = New-Object System.Drawing.Size(72, 72)
+    $picLogoFirefox.Location = New-Object System.Drawing.Point(20, $y)
+    $picLogoFirefox.SizeMode = "Zoom"
+    $picLogoFirefox.Image = New-FirefoxLogoBitmap
+    $painelConteudo.Controls.Add($picLogoFirefox)
+
+    # Rotulo de status (fica ao lado da logo)
+    $labelStatusFirefox = New-Object System.Windows.Forms.Label
+    $labelStatusFirefox.Text = "Pronto."
+    $labelStatusFirefox.AutoSize = $true
+    $labelStatusFirefox.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $labelStatusFirefox.Location = New-Object System.Drawing.Point(105, ($y + 25))
+    $labelStatusFirefox.MaximumSize = New-Object System.Drawing.Size(320, 0)
+    $painelConteudo.Controls.Add($labelStatusFirefox)
+
+    $y += 85
+
+    # Botao Instalar (abaixo da logo)
+    $botaoInstalarFirefox = New-Object System.Windows.Forms.Button
+    $botaoInstalarFirefox.Text = "Instalar"
+    $botaoInstalarFirefox.Width = 105
+    $botaoInstalarFirefox.Height = 40
+    $botaoInstalarFirefox.FlatStyle = "Flat"
+    $botaoInstalarFirefox.BackColor = [System.Drawing.Color]::FromArgb(0, 153, 76)
+    $botaoInstalarFirefox.ForeColor = [System.Drawing.Color]::White
+    $botaoInstalarFirefox.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $botaoInstalarFirefox.Location = New-Object System.Drawing.Point(20, $y)
+    $painelConteudo.Controls.Add($botaoInstalarFirefox)
+
+    # Botao Desinstalar (ao lado do Instalar)
+    $botaoDesinstalarFirefox = New-Object System.Windows.Forms.Button
+    $botaoDesinstalarFirefox.Text = "Desinstalar"
+    $botaoDesinstalarFirefox.Width = 105
+    $botaoDesinstalarFirefox.Height = 40
+    $botaoDesinstalarFirefox.FlatStyle = "Flat"
+    $botaoDesinstalarFirefox.BackColor = [System.Drawing.Color]::FromArgb(200, 40, 40)
+    $botaoDesinstalarFirefox.ForeColor = [System.Drawing.Color]::White
+    $botaoDesinstalarFirefox.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $botaoDesinstalarFirefox.Location = New-Object System.Drawing.Point(135, $y)
+    $painelConteudo.Controls.Add($botaoDesinstalarFirefox)
+
+    # URL oficial da Mozilla para o instalador mais recente (64 bits, pt-BR)
+    $urlOficialFirefox = "https://download.mozilla.org/?product=firefox-latest&os=win64&lang=pt-BR"
+
+    $botaoInstalarFirefox.Add_Click({
+        $botaoInstalarFirefox.Enabled = $false
+        $botaoDesinstalarFirefox.Enabled = $false
+        $labelStatusFirefox.Text = "Baixando instalador oficial da Mozilla..."
+
+        $destinoInstalador = Join-Path $env:TEMP "FirefoxSetup.exe"
+        $webClient = New-Object System.Net.WebClient
+
+        $webClient.Add_DownloadProgressChanged({
+            param($s, $e)
+            $labelStatusFirefox.Text = "Baixando instalador oficial... $($e.ProgressPercentage)%"
+        })
+
+        $webClient.Add_DownloadFileCompleted({
+            param($s, $e)
+            if ($e.Error) {
+                $labelStatusFirefox.Text = "Erro ao baixar: $($e.Error.Message)"
+                $botaoInstalarFirefox.Enabled = $true
+                $botaoDesinstalarFirefox.Enabled = $true
+                return
+            }
+
+            $labelStatusFirefox.Text = "Executando instalacao silenciosa..."
+            try {
+                # /S = instalacao silenciosa (padrao do instalador NSIS do Firefox)
+                Start-Process -FilePath $destinoInstalador -ArgumentList "/S"
+                $labelStatusFirefox.Text = "Instalacao iniciada. Aguarde alguns instantes."
+            } catch {
+                $labelStatusFirefox.Text = "Erro ao instalar: $($_.Exception.Message)"
+            } finally {
+                $botaoInstalarFirefox.Enabled = $true
+                $botaoDesinstalarFirefox.Enabled = $true
+            }
+        })
+
+        try {
+            $webClient.DownloadFileAsync([Uri]$urlOficialFirefox, $destinoInstalador)
+        } catch {
+            $labelStatusFirefox.Text = "Erro ao iniciar download: $($_.Exception.Message)"
+            $botaoInstalarFirefox.Enabled = $true
+            $botaoDesinstalarFirefox.Enabled = $true
+        }
+    })
+
+    $botaoDesinstalarFirefox.Add_Click({
+        $botaoInstalarFirefox.Enabled = $false
+        $botaoDesinstalarFirefox.Enabled = $false
+        $labelStatusFirefox.Text = "Procurando instalacao do Firefox..."
+        [System.Windows.Forms.Application]::DoEvents()
+
+        $info = Get-FirefoxUninstallInfo
+
+        if (-not $info) {
+            $labelStatusFirefox.Text = "Firefox nao encontrado nesta maquina."
+            $botaoInstalarFirefox.Enabled = $true
+            $botaoDesinstalarFirefox.Enabled = $true
+            return
+        }
+
+        $labelStatusFirefox.Text = "Desinstalando silenciosamente..."
+        [System.Windows.Forms.Application]::DoEvents()
+
+        try {
+            $uninstallString = $info.UninstallString
+
+            if ($uninstallString -match '^\s*"([^"]+)"\s*(.*)$') {
+                $executavel = $Matches[1]
+                $argumentosExtras = $Matches[2].Trim()
+            } else {
+                $partes = $uninstallString -split ' ', 2
+                $executavel = $partes[0]
+                $argumentosExtras = if ($partes.Count -gt 1) { $partes[1] } else { "" }
+            }
+
+            # /S = desinstalacao silenciosa (padrao do instalador NSIS do Firefox)
+            $argumentosFinais = ("$argumentosExtras /S").Trim()
+            Start-Process -FilePath $executavel -ArgumentList $argumentosFinais -Wait
+
+            $labelStatusFirefox.Text = "Firefox desinstalado com sucesso."
+        } catch {
+            $labelStatusFirefox.Text = "Erro ao desinstalar: $($_.Exception.Message)"
+        } finally {
+            $botaoInstalarFirefox.Enabled = $true
+            $botaoDesinstalarFirefox.Enabled = $true
+        }
+    })
 })
 
 # Exibe a tela de navegadores automaticamente ao abrir (opcional)
