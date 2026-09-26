@@ -78,7 +78,7 @@ function Get-NavegadoresInstalados {
 # Formulario principal
 # ------------------------------------------------------------------
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Menu Principal"
+$form.Text = "Onix Consulting"
 $form.Size = New-Object System.Drawing.Size(700, 450)
 $form.StartPosition = "CenterScreen"
 $form.MinimumSize = New-Object System.Drawing.Size(600, 400)
