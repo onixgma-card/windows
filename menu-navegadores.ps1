@@ -317,41 +317,51 @@ $botaoNavegadores.Add_Click({
         $botaoInstalarFirefox.Enabled = $false
         $botaoDesinstalarFirefox.Enabled = $false
         $labelStatusFirefox.Text = "Baixando instalador oficial da Mozilla..."
+        [System.Windows.Forms.Application]::DoEvents()
 
         $destinoInstalador = Join-Path $env:TEMP "FirefoxSetup.exe"
-        $webClient = New-Object System.Net.WebClient
-
-        $webClient.Add_DownloadProgressChanged({
-            param($s, $e)
-            $labelStatusFirefox.Text = "Baixando instalador oficial... $($e.ProgressPercentage)%"
-        })
-
-        $webClient.Add_DownloadFileCompleted({
-            param($s, $e)
-            if ($e.Error) {
-                $labelStatusFirefox.Text = "Erro ao baixar: $($e.Error.Message)"
-                $botaoInstalarFirefox.Enabled = $true
-                $botaoDesinstalarFirefox.Enabled = $true
-                return
-            }
-
-            $labelStatusFirefox.Text = "Executando instalacao silenciosa..."
-            try {
-                # /S = instalacao silenciosa (padrao do instalador NSIS do Firefox)
-                Start-Process -FilePath $destinoInstalador -ArgumentList "/S"
-                $labelStatusFirefox.Text = "Instalacao iniciada. Aguarde alguns instantes."
-            } catch {
-                $labelStatusFirefox.Text = "Erro ao instalar: $($_.Exception.Message)"
-            } finally {
-                $botaoInstalarFirefox.Enabled = $true
-                $botaoDesinstalarFirefox.Enabled = $true
-            }
-        })
 
         try {
-            $webClient.DownloadFileAsync([Uri]$urlOficialFirefox, $destinoInstalador)
+            # Forca TLS 1.2 (necessario em algumas versoes do Windows PowerShell,
+            # caso contrario o download falha com erro de canal SSL/TLS)
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+            if (Test-Path $destinoInstalador) {
+                Remove-Item $destinoInstalador -Force -ErrorAction SilentlyContinue
+            }
+
+            # Download sincrono: mais confiavel dentro de um formulario WinForms
+            # do que o DownloadFileAsync (cujos eventos podem nao disparar).
+            Invoke-WebRequest -Uri $urlOficialFirefox -OutFile $destinoInstalador -UseBasicParsing
+
+            if (-not (Test-Path $destinoInstalador) -or (Get-Item $destinoInstalador).Length -lt 1MB) {
+                throw "O arquivo baixado esta vazio ou incompleto. Verifique a conexao com a internet."
+            }
+
+            $labelStatusFirefox.Text = "Download concluido. Executando instalacao silenciosa..."
+            [System.Windows.Forms.Application]::DoEvents()
+
+            # /S = instalacao silenciosa (padrao do instalador NSIS do Firefox)
+            # -Wait garante que so avancamos apos o instalador terminar
+            Start-Process -FilePath $destinoInstalador -ArgumentList "/S" -Wait
+
+            Start-Sleep -Seconds 2
+            $verificacao = Get-FirefoxUninstallInfo
+
+            if ($verificacao) {
+                $labelStatusFirefox.Text = "Firefox instalado com sucesso."
+            } else {
+                $labelStatusFirefox.Text = "Instalador executado, mas o Firefox nao foi detectado no registro. Tente executar este script como Administrador."
+            }
         } catch {
-            $labelStatusFirefox.Text = "Erro ao iniciar download: $($_.Exception.Message)"
+            $labelStatusFirefox.Text = "Erro ao instalar: $($_.Exception.Message)"
+            [System.Windows.Forms.MessageBox]::Show(
+                "Falha ao instalar o Firefox:`n`n$($_.Exception.Message)",
+                "Erro na instalacao",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error
+            )
+        } finally {
             $botaoInstalarFirefox.Enabled = $true
             $botaoDesinstalarFirefox.Enabled = $true
         }
